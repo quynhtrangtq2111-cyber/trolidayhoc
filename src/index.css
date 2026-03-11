@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl;
+  }
+
+  .glass-card {
+    @apply bg-white/90 backdrop-blur-md border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+
+  .gradient-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600;
+  }
+
+  .animated-bg {
+    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+  }
+
+  .mesh-bg {
+    background-color: #f8fafc;
+    background-image:
+      radial-gradient(at 40% 20%, hsla(271, 78%, 76%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, hsla(305, 80%, 78%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, hsla(190, 83%, 72%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 80% 50%, hsla(347, 77%, 78%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(22, 100%, 77%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 80% 100%, hsla(242, 100%, 70%, 0.2) 0px, transparent 50%),
+      radial-gradient(at 0% 0%, hsla(343, 100%, 76%, 0.2) 0px, transparent 50%);
+  }
+}
+
+@keyframes gradientBG {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Custom Scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Markdown prose overrides for math */
+.prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1rem 0;
+}
+
+.prose ul {
+  @apply list-disc list-inside space-y-1;
+}
+
+.prose p {
+  @apply leading-relaxed;
+}
