@@ -29,6 +29,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import VuaTiengVietGame from './VuaTiengVietGame';
+import VuotAiTriThucGame from './VuotAiTriThucGame';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -154,6 +156,7 @@ export default function App() {
   const [questions, setQuestions] = useState<string | null>(null);
   const [parsedQuestions, setParsedQuestions] = useState<QuestionItem[]>([]);
   const [activities, setActivities] = useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -416,6 +419,7 @@ export default function App() {
     setParsedQuestions([]);
     setActivities(null);
     setError(null);
+    setSelectedGameId(null);
   };
 
   const getQuestionsPart = () => {
@@ -853,7 +857,10 @@ export default function App() {
                   {parsedQuestions.length > 0 && (
                     <div className="mt-8 pt-6 border-t border-indigo-100">
                        <button
-                         onClick={() => setStage(5)}
+                         onClick={() => {
+                           setStage(5);
+                           setSelectedGameId(null);
+                         }}
                          className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-300 hover:-translate-y-1 transition-all"
                        >
                          <Gamepad2 size={24} />
@@ -896,32 +903,112 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="max-w-4xl mx-auto"
             >
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-3xl font-bold flex items-center gap-3">
-                    <Gamepad2 className="text-violet-600" size={32} />
-                    Quiz Mở Thẻ
-                  </h2>
-                  <p className="text-slate-500 mt-2">Ví dụ về luồng truyền câu hỏi từ App sang Game.</p>
-                </div>
-                <button
-                  onClick={() => setStage(3)}
-                  className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
-                >
-                  <ChevronRight size={16} className="rotate-180" /> Quay lại chỉnh sửa
-                </button>
-              </div>
-
-              <div className="glass-card rounded-3xl p-8 bg-gradient-to-br from-indigo-900 via-violet-900 to-purple-900 text-white min-h-[500px]">
-                {/* Game Logic Render here */}
-                {parsedQuestions.length > 0 ? (
-                  <GameComponent questions={parsedQuestions} />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-white/50">
-                    Chưa có câu hỏi nào để hiển thị trong game.
+              {!selectedGameId ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-3xl font-bold flex items-center gap-3">
+                        <Gamepad2 className="text-violet-600" size={32} />
+                        Chọn Trò Chơi
+                      </h2>
+                      <p className="text-slate-500 mt-2">Hãy chọn một trò chơi để tích hợp với câu hỏi bạn vừa tạo.</p>
+                    </div>
+                    <button
+                      onClick={() => setStage(3)}
+                      className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    >
+                      <ChevronRight size={16} className="rotate-180" /> Quay lại chỉnh sửa
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div 
+                      onClick={() => setSelectedGameId('default')}
+                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-indigo-500 hover:shadow-lg hover:shadow-indigo-100 transition-all group"
+                    >
+                      <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <Gamepad2 size={24} />
+                      </div>
+                      <h3 className="text-xl font-bold mb-2">Quiz Mở Thẻ</h3>
+                      <p className="text-sm text-slate-500">Mặc định. Trả lời đúng để mở thẻ, phù hợp trắc nghiệm.</p>
+                    </div>
+
+                    <div 
+                      onClick={() => setSelectedGameId('vuot_ai')}
+                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-sky-500 hover:shadow-lg hover:shadow-sky-100 transition-all group"
+                    >
+                      <div className="w-12 h-12 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <CheckCircle2 size={24} />
+                      </div>
+                      <h3 className="text-xl font-bold mb-2">Vượt Ải Tri Thức</h3>
+                      <p className="text-sm text-slate-500">Giao diện bóng tối. Trả lời đúng/sai hoặc trắc nghiệm tốc độ vòng 1.</p>
+                    </div>
+
+                    <div 
+                      onClick={() => setSelectedGameId('vua_tieng_viet')}
+                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-pink-500 hover:shadow-lg hover:shadow-pink-100 transition-all group"
+                    >
+                      <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <BookOpen size={24} />
+                      </div>
+                      <h3 className="text-xl font-bold mb-2">Vua Tiếng Việt</h3>
+                      <p className="text-sm text-slate-500">Thử thách từ vựng. Trả lời ngắn, sắp xếp chữ cái trong thời gian giới hạn.</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full h-full min-h-[600px]">
+                  {selectedGameId === 'default' && (
+                    <div className="glass-card rounded-3xl p-8 bg-gradient-to-br from-indigo-900 via-violet-900 to-purple-900 text-white min-h-[500px] relative">
+                      <button
+                        onClick={() => setSelectedGameId(null)}
+                        className="absolute top-4 left-4 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                        <ChevronRight size={16} className="rotate-180" /> Đổi Game
+                      </button>
+                      <div className="mt-8 h-full">
+                        {parsedQuestions.length > 0 ? (
+                          <GameComponent questions={parsedQuestions} />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-white/50">
+                            Chưa có câu hỏi nào để hiển thị trong game.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {selectedGameId === 'vuot_ai' && (
+                    <VuotAiTriThucGame 
+                      initialQuestions={parsedQuestions.map(q => ({
+                        ...q,
+                        options: q.options || ['Đúng', 'Sai']
+                      }))} 
+                      onBack={() => setSelectedGameId(null)} 
+                    />
+                  )}
+                  {selectedGameId === 'vua_tieng_viet' && (
+                    <VuaTiengVietGame 
+                      initialQuestions={parsedQuestions.map(q => {
+                        // Extract correct answer logic
+                        let answer = q.correctAnswer || (q.options ? q.options[0] : 'ĐÁP ÁN');
+                        if (['A', 'B', 'C', 'D'].includes(answer) && q.options) {
+                           const idx = ['A', 'B', 'C', 'D'].indexOf(answer);
+                           if (idx >= 0 && q.options[idx]) {
+                             answer = q.options[idx];
+                           }
+                        }
+                        return {
+                          text: q.content,
+                          answer: answer,
+                          scrambled: answer.split('').sort(() => Math.random() - 0.5).join('').toUpperCase(),
+                          image: null
+                        };
+                      })} 
+                      onBack={() => setSelectedGameId(null)} 
+                    />
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
