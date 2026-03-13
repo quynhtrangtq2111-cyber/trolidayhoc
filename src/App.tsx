@@ -34,8 +34,40 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Game Links DB
+const GAME_LINKS = [
+  {
+    id: '1',
+    name: 'Bức tranh bí ẩn',
+    types: ['Trắc nghiệm khách quan'],
+    url: 'https://gemini.google.com/share/660e3334a4f5',
+    description: 'Trò chơi lật mở từng mảnh ghép bức tranh.',
+  },
+  {
+    id: '2',
+    name: 'Mật mã thám hiểm',
+    types: ['Trắc nghiệm khách quan'],
+    url: 'https://gemini.google.com/share/91b856e24dd5',
+    description: 'Giải mã câu hỏi để tìm đường ra.',
+  },
+  {
+    id: '3',
+    name: 'Vua tiếng Việt',
+    types: ['Trả lời ngắn'],
+    url: 'https://gemini.google.com/share/694fd9555ec9',
+    description: 'Thử tài ngôn ngữ với các câu hỏi ngắn.',
+  },
+  {
+    id: '4',
+    name: 'Vượt ải tri thức',
+    types: ['Đúng / Sai', 'Trắc nghiệm khách quan'],
+    url: 'https://gemini.google.com/share/471c4821fa15',
+    description: 'Vượt qua các chướng ngại vật bằng cách trả lời đúng.',
+  }
+];
+
 // Types
-type Stage = 1 | 2 | 3 | 4;
+type Stage = 1 | 2 | 3 | 4 | 5;
 
 interface LessonAnalysis {
   subject: string;
@@ -50,6 +82,15 @@ interface TeacherNeeds {
   studentLevel: string;
   purpose: string;
   counts: Record<string, number>; // key format: "type|level"
+}
+
+interface QuestionItem {
+  id: string;
+  content: string;
+  options?: string[]; // Cho trắc nghiệm
+  correctAnswer?: string;
+  type: string;
+  level: string;
 }
 
 const AI_MODELS = [
@@ -109,8 +150,9 @@ export default function App() {
     counts: {}
   });
 
-  // Stage 3 & 4 State
+  // Stage 3, 4, 5 State
   const [questions, setQuestions] = useState<string | null>(null);
+  const [parsedQuestions, setParsedQuestions] = useState<QuestionItem[]>([]);
   const [activities, setActivities] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,12 +186,42 @@ export default function App() {
     throw new Error(lastError?.message || JSON.stringify(lastError) || "Tất cả các model đều thất bại. Thử lại sau.");
   };
 
+  const compressImage = (dataUrl: string, maxSize = 1024, quality = 0.7): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+
+        // Scale down if larger than maxSize
+        if (width > maxSize || height > maxSize) {
+          const ratio = Math.min(maxSize / width, maxSize / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress as JPEG
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.src = dataUrl;
+    });
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+      reader.onloadend = async () => {
+        const raw = reader.result as string;
+        // Compress image to reduce API payload and speed up analysis
+        const compressed = await compressImage(raw);
+        setSelectedImage(compressed);
       };
       reader.readAsDataURL(file);
     }
@@ -189,10 +261,13 @@ export default function App() {
 
       if (selectedImage) {
         const base64Data = selectedImage.split(',')[1];
+        // Detect MIME type from data URL
+        const mimeMatch = selectedImage.match(/^data:(image\/\w+);/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
         parts.push({
           inlineData: {
             data: base64Data,
-            mimeType: "image/png"
+            mimeType
           }
         });
       }
@@ -249,9 +324,19 @@ export default function App() {
       👉 Tiếp theo, chúng ta sẽ đến với hệ thống câu hỏi và hoạt động!
 
       ### 🎯 BƯỚC 3: HỆ THỐNG CÂU HỎI
-      - Ghi rõ mức độ nhận thức cạnh tiêu đề (Ví dụ: Câu 1 [Nhận biết]).
-      - Sử dụng LaTeX cho công thức Toán/Hóa ($...$).
-      - Tạo đúng số lượng yêu cầu.
+      - Tạo đúng số lượng và định dạng.
+      - QUAN TRỌNG: Bạn PHẢI trả về danh sách câu hỏi dưới định dạng mã JSON. Hãy bọc mã JSON này trong block \`\`\`json ... \`\`\`.
+      - Cấu trúc JSON mong muốn là một mảng các đối tượng: 
+      [
+        {
+          "id": "q1",
+          "content": "Nội dung câu hỏi...",
+          "options": ["A", "B", "C", "D"], // (Bỏ qua nếu là tự luận/trả lời ngắn)
+          "correctAnswer": "A", 
+          "type": "Trắc nghiệm khách quan",
+          "level": "Nhận biết"
+        }
+      ]
 
       ### 🎮 BƯỚC 4: GỢI Ý HOẠT ĐỘNG HỌC TẬP
       
@@ -270,6 +355,20 @@ export default function App() {
       const fullText = text || "";
       setQuestions(fullText);
       setStage(3);
+      
+      // Parse JSON from fullText
+      const jsonMatch = fullText.match(/\`\`\`json\n([\s\S]*?)\n\`\`\`/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (Array.isArray(parsed)) {
+            setParsedQuestions(parsed);
+          }
+        } catch (e) {
+          console.error("Lỗi parse JSON câu hỏi:", e);
+        }
+      }
+
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Đã có lỗi xảy ra khi tạo câu hỏi. Vui lòng thử lại.');
@@ -278,12 +377,43 @@ export default function App() {
     }
   };
 
+  const handleQuestionChange = (id: string, field: string, value: any, optionIndex?: number) => {
+    setParsedQuestions(prev => prev.map(q => {
+      if (q.id === id) {
+        if (field === 'options' && optionIndex !== undefined && q.options) {
+          const newOptions = [...q.options];
+          newOptions[optionIndex] = value;
+          return { ...q, options: newOptions };
+        }
+        return { ...q, [field]: value };
+      }
+      return q;
+    }));
+  };
+
+  const removeQuestion = (id: string) => {
+    setParsedQuestions(prev => prev.filter(q => q.id !== id));
+  };
+  
+  const addQuestion = () => {
+    const newId = `q${Date.now()}`;
+    setParsedQuestions(prev => [...prev, {
+      id: newId,
+      content: '',
+      type: needs.questionType[0] || 'Trắc nghiệm khách quan',
+      level: needs.cognitiveLevel[0] || 'Nhận biết',
+      options: ['A', 'B', 'C', 'D'],
+      correctAnswer: 'A'
+    }]);
+  };
+
   const reset = () => {
     setStage(1);
     setInputText('');
     setSelectedImage(null);
     setAnalysis(null);
     setQuestions(null);
+    setParsedQuestions([]);
     setActivities(null);
     setError(null);
   };
@@ -353,7 +483,7 @@ export default function App() {
                 <div className="glass-card p-6 rounded-3xl">
                   <div className="flex items-center gap-2 mb-4 text-indigo-600">
                     <FileText size={20} />
-                    <span className="font-semibold">Văn bản bài học</span>
+                    <span className="font-semibold">Nội dung bài học</span>
                   </div>
                   <textarea
                     className="w-full h-64 p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-sm"
@@ -452,22 +582,25 @@ export default function App() {
                   <p className="text-sm text-slate-500">Bạn muốn mình tạo câu hỏi như thế nào nhỉ? Hãy chọn các thẻ bên dưới nhé!</p>
                   {/* Question Types */}
                   <div className="space-y-3">
-                    <label className="text-sm font-semibold text-slate-700">1. Dạng câu hỏi mong muốn?</label>
+                    <label className="text-sm font-semibold text-slate-700">1. Dạng câu hỏi mong muốn? <span className="text-xs font-normal text-slate-400">(Tối đa 2)</span></label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {['Đúng / Sai', 'Trắc nghiệm khách quan', 'Trả lời ngắn', 'Điền khuyết', 'Kéo thả'].map(type => (
                         <button
                           key={type}
+                          disabled={!needs.questionType.includes(type) && needs.questionType.length >= 2}
                           onClick={() => {
                             const newTypes = needs.questionType.includes(type)
                               ? needs.questionType.filter(t => t !== type)
-                              : [...needs.questionType, type];
+                              : needs.questionType.length < 2 ? [...needs.questionType, type] : needs.questionType;
                             setNeeds({ ...needs, questionType: newTypes });
                           }}
                           className={cn(
                             "px-4 py-2 rounded-lg border text-sm transition-all text-left",
                             needs.questionType.includes(type)
                               ? "bg-indigo-50 border-indigo-500 text-indigo-700 font-medium"
-                              : "border-slate-200 hover:border-slate-300 text-slate-600"
+                              : !needs.questionType.includes(type) && needs.questionType.length >= 2
+                                ? "border-slate-100 text-slate-300 cursor-not-allowed bg-slate-50"
+                                : "border-slate-200 hover:border-slate-300 text-slate-600"
                           )}
                         >
                           {type}
@@ -634,15 +767,100 @@ export default function App() {
                 {/* Questions */}
                 <div className="glass-card p-8 rounded-3xl space-y-6 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-indigo-500 to-violet-500 rounded-l-3xl"></div>
-                  <div className="flex items-center gap-2 text-indigo-600">
+                  <div className="flex items-center gap-2 text-indigo-600 mb-6">
                     <HelpCircle size={24} />
-                    <h3 className="text-xl font-bold">🎯 Bước 3: Hệ thống câu hỏi</h3>
+                    <h3 className="text-xl font-bold">🎯 Bước 3: Chỉnh sửa Câu hỏi</h3>
                   </div>
-                  <div className="prose prose-indigo prose-sm max-w-none bg-white/70 p-6 rounded-2xl border border-indigo-100 shadow-inner backdrop-blur-sm">
-                    <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                      {getQuestionsPart()}
-                    </Markdown>
-                  </div>
+                  
+                  {parsedQuestions.length > 0 ? (
+                    <div className="space-y-6">
+                      {parsedQuestions.map((q, idx) => (
+                        <div key={q.id} className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-sm relative group">
+                          <button 
+                            onClick={() => removeQuestion(q.id)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={16} />
+                          </button>
+                          
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded text-xs">Câu {idx + 1}</span>
+                            <span className="text-xs text-slate-500">{q.type} - {q.level}</span>
+                          </div>
+
+                          <textarea
+                            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-sm mb-3 font-medium"
+                            value={q.content}
+                            onChange={(e) => handleQuestionChange(q.id, 'content', e.target.value)}
+                            rows={3}
+                            placeholder="Nội dung câu hỏi..."
+                          />
+
+                          {q.options && q.options.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                              {q.options.map((opt, oIdx) => (
+                                <div key={oIdx} className="flex flex-col gap-1 text-sm">
+                                  <span className="text-xs text-slate-500 font-medium">Đáp án {['A', 'B', 'C', 'D'][oIdx]}</span>
+                                  <input
+                                    type="text"
+                                    className="w-full p-2 rounded-lg bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    value={opt}
+                                    onChange={(e) => handleQuestionChange(q.id, 'options', e.target.value, oIdx)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {q.options && (
+                            <div className="flex items-center gap-2 text-sm mt-3 pt-3 border-t border-slate-100">
+                              <span className="font-semibold text-emerald-600">Đáp án đúng:</span>
+                              <select 
+                                value={q.correctAnswer}
+                                onChange={(e) => handleQuestionChange(q.id, 'correctAnswer', e.target.value)}
+                                className="p-1.5 rounded-lg border border-slate-200 bg-emerald-50 text-emerald-700 outline-none"
+                              >
+                                {q.options.map((opt, oIdx) => (
+                                  <option key={oIdx} value={['A', 'B', 'C', 'D'][oIdx]}>
+                                    {['A', 'B', 'C', 'D'][oIdx]}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      
+                      <button 
+                        onClick={addQuestion}
+                        className="w-full py-3 border-2 border-dashed border-indigo-200 text-indigo-600 rounded-xl font-medium hover:bg-indigo-50 hover:border-indigo-400 transition-all"
+                      >
+                        + Thêm câu hỏi
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 text-center text-slate-500">
+                      Không thể trích xuất dưới dạng chỉnh sửa được. Hãy xem kết quả gốc bên dưới.
+                      <div className="prose prose-indigo prose-sm mt-4 text-left">
+                        <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {getQuestionsPart()}
+                        </Markdown>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Game Launch Section */}
+                  {parsedQuestions.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-indigo-100">
+                       <button
+                         onClick={() => setStage(5)}
+                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-300 hover:-translate-y-1 transition-all"
+                       >
+                         <Gamepad2 size={24} />
+                         Lưu & Chơi thử Game
+                       </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Activities */}
@@ -666,6 +884,43 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stage 5: Mini-Game */}
+          {stage === 5 && (
+            <motion.div
+              key="stage5"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-4xl mx-auto"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold flex items-center gap-3">
+                    <Gamepad2 className="text-violet-600" size={32} />
+                    Quiz Mở Thẻ
+                  </h2>
+                  <p className="text-slate-500 mt-2">Ví dụ về luồng truyền câu hỏi từ App sang Game.</p>
+                </div>
+                <button
+                  onClick={() => setStage(3)}
+                  className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                >
+                  <ChevronRight size={16} className="rotate-180" /> Quay lại chỉnh sửa
+                </button>
+              </div>
+
+              <div className="glass-card rounded-3xl p-8 bg-gradient-to-br from-indigo-900 via-violet-900 to-purple-900 text-white min-h-[500px]">
+                {/* Game Logic Render here */}
+                {parsedQuestions.length > 0 ? (
+                  <GameComponent questions={parsedQuestions} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-white/50">
+                    Chưa có câu hỏi nào để hiển thị trong game.
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -829,6 +1084,125 @@ export default function App() {
       <footer className="max-w-5xl mx-auto px-6 py-12 border-t border-slate-200 text-center">
         <p className="text-sm text-slate-400">© 2024 Trợ lý Thiết kế Bài học AI. Công cụ hỗ trợ giáo dục thông minh.</p>
       </footer>
+    </div>
+  );
+}
+
+// Simple Game Component integration
+function GameComponent({ questions }: { questions: QuestionItem[] }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedOpt, setSelectedOpt] = useState<string | null>(null);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+
+  const currentQ = questions[currentIndex];
+
+  const handleSelect = (idxStr: string) => {
+    if (showAnswer) return;
+    setSelectedOpt(idxStr);
+    setShowAnswer(true);
+    
+    if (idxStr === currentQ.correctAnswer) {
+      setScore(s => s + 10);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(i => i + 1);
+      setSelectedOpt(null);
+      setShowAnswer(false);
+    } else {
+      setGameOver(true);
+    }
+  };
+
+  if (gameOver) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[500px] text-center space-y-6">
+        <h2 className="text-5xl font-bold text-yellow-400">🎉 Hoàn Thành! 🎉</h2>
+        <p className="text-3xl">Điểm của bạn: <span className="font-bold text-white text-5xl">{score}</span></p>
+        <button 
+          onClick={() => {
+            setCurrentIndex(0);
+            setScore(0);
+            setGameOver(false);
+            setSelectedOpt(null);
+            setShowAnswer(false);
+          }}
+          className="px-8 py-3 bg-white text-indigo-900 rounded-xl font-bold hover:bg-indigo-50 transition-colors"
+        >
+          Chơi lại
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-[500px]">
+      <div className="flex justify-between items-center mb-8">
+        <div className="bg-white/20 px-4 py-2 rounded-full font-bold text-sm tracking-widest backdrop-blur-sm">
+          CÂU {currentIndex + 1} / {questions.length}
+        </div>
+        <div className="bg-yellow-400/20 text-yellow-300 px-4 py-2 rounded-full font-bold text-sm tracking-widest backdrop-blur-sm">
+          ⭐ ĐIỂM: {score}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center">
+        <h3 className="text-2xl font-bold text-center leading-relaxed mb-8">
+          <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{currentQ.content}</Markdown>
+        </h3>
+
+        {currentQ.options && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto w-full">
+            {currentQ.options.map((opt, idx) => {
+              const letter = ['A', 'B', 'C', 'D'][idx];
+              let btnClass = "bg-white/10 hover:bg-white/20 border-white/20";
+              
+              if (showAnswer) {
+                if (letter === currentQ.correctAnswer) {
+                  btnClass = "bg-emerald-500 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.5)] z-10 scale-105";
+                } else if (letter === selectedOpt) {
+                  btnClass = "bg-red-500 border-red-400 opacity-80";
+                } else {
+                  btnClass = "bg-white/5 border-transparent opacity-50";
+                }
+              }
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => handleSelect(letter)}
+                  className={cn(
+                    "p-6 rounded-2xl border-2 text-left transition-all duration-300 backdrop-blur-sm",
+                    btnClass
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="w-10 h-10 rounded-full bg-black/20 flex items-center justify-center font-bold text-lg shrink-0 text-white">
+                      {letter}
+                    </span>
+                    <span className="text-lg font-medium text-white">{opt}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="h-20 flex items-center justify-end mt-8">
+        {showAnswer && (
+          <button
+            onClick={handleNext}
+            className="px-8 py-3 bg-white text-indigo-900 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 shadow-xl"
+          >
+            {currentIndex < questions.length - 1 ? "Câu tiếp theo" : "Xem kết quả"} <ChevronRight size={20} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
