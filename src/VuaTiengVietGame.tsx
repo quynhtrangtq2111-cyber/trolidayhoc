@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Play, Save, ChevronRight, CheckCircle2 } from 'lucide-react';
-import { cn } from './lib/utils'; // Assuming tailwind-merge util is available, else we inline it
+
+function cn(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(' ');
+}
 
 export interface ScrambleQuestion {
   text: string;
