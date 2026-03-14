@@ -36,40 +36,47 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// Game Links DB
-const GAME_LINKS = [
+// Game Library with compatibility mapping
+const QUESTION_TYPES = [
+  { id: 'Đúng / Sai', label: 'Đúng / Sai', emoji: '✅' },
+  { id: 'Trắc nghiệm khách quan', label: 'Trắc nghiệm', emoji: '🔤' },
+  { id: 'Trả lời ngắn', label: 'Trả lời ngắn', emoji: '✏️' },
+  { id: 'Điền khuyết', label: 'Điền khuyết', emoji: '📝' },
+  { id: 'Kéo thả', label: 'Kéo thả', emoji: '🔀' },
+];
+
+const GAME_LIBRARY = [
   {
-    id: '1',
-    name: 'Bức tranh bí ẩn',
-    types: ['Trắc nghiệm khách quan'],
-    url: 'https://gemini.google.com/share/660e3334a4f5',
-    description: 'Trò chơi lật mở từng mảnh ghép bức tranh.',
+    id: 'default',
+    name: 'Quiz Mở Thẻ',
+    emoji: '🎴',
+    description: 'Trả lời đúng để lật mở từng thẻ bài.',
+    compatibleTypes: ['Trắc nghiệm khách quan', 'Đúng / Sai'],
+    colorFrom: 'from-indigo-500', colorTo: 'to-violet-500',
+    hoverBorder: 'hover:border-indigo-400',
   },
   {
-    id: '2',
-    name: 'Mật mã thám hiểm',
-    types: ['Trắc nghiệm khách quan'],
-    url: 'https://gemini.google.com/share/91b856e24dd5',
-    description: 'Giải mã câu hỏi để tìm đường ra.',
+    id: 'vuot_ai',
+    name: 'Vượt Ải Tri Thức',
+    emoji: '⚔️',
+    description: 'Giao diện tối. Trả lời nhanh vượt qua từng ải.',
+    compatibleTypes: ['Trắc nghiệm khách quan', 'Đúng / Sai'],
+    colorFrom: 'from-sky-500', colorTo: 'to-blue-600',
+    hoverBorder: 'hover:border-sky-400',
   },
   {
-    id: '3',
-    name: 'Vua tiếng Việt',
-    types: ['Trả lời ngắn'],
-    url: 'https://gemini.google.com/share/694fd9555ec9',
-    description: 'Thử tài ngôn ngữ với các câu hỏi ngắn.',
+    id: 'vua_tieng_viet',
+    name: 'Vua Tiếng Việt',
+    emoji: '👑',
+    description: 'Sắp xếp chữ cái trong thời gian giới hạn.',
+    compatibleTypes: ['Trả lời ngắn', 'Điền khuyết'],
+    colorFrom: 'from-pink-500', colorTo: 'to-rose-500',
+    hoverBorder: 'hover:border-pink-400',
   },
-  {
-    id: '4',
-    name: 'Vượt ải tri thức',
-    types: ['Đúng / Sai', 'Trắc nghiệm khách quan'],
-    url: 'https://gemini.google.com/share/471c4821fa15',
-    description: 'Vượt qua các chướng ngại vật bằng cách trả lời đúng.',
-  }
 ];
 
 // Types
-type Stage = 1 | 2 | 3 | 4 | 5;
+type AppStage = 'home' | 'm1_type' | 'm1_input' | 'm1_edit' | 'm1_game' | 'm2_analyze' | 'm2_needs' | 'm2_questions' | 'm2_game';
 
 interface LessonAnalysis {
   subject: string;
@@ -102,7 +109,7 @@ const AI_MODELS = [
 ];
 
 export default function App() {
-  const [stage, setStage] = useState<Stage>(1);
+  const [stage, setStage] = useState<AppStage>('home');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,7 +159,11 @@ export default function App() {
     counts: {}
   });
 
-  // Stage 3, 4, 5 State
+  // Mode 1 State
+  const [m1QuestionTypes, setM1QuestionTypes] = useState<string[]>([]);
+  const [m1RawText, setM1RawText] = useState('');
+
+  // Mode 2 / Shared State
   const [questions, setQuestions] = useState<string | null>(null);
   const [parsedQuestions, setParsedQuestions] = useState<QuestionItem[]>([]);
   const [activities, setActivities] = useState<string | null>(null);
@@ -278,7 +289,7 @@ export default function App() {
       const text = await callGeminiWithFallback(parts);
 
       setAnalysis(text || "Không thể phân tích nội dung.");
-      setStage(2);
+      setStage('m2_needs');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Đã có lỗi xảy ra trong quá trình phân tích. Vui lòng thử lại.');
@@ -357,7 +368,7 @@ export default function App() {
 
       const fullText = text || "";
       setQuestions(fullText);
-      setStage(3);
+      setStage('m2_questions');
       
       // Parse JSON from fullText
       const jsonMatch = fullText.match(/\`\`\`json\n([\s\S]*?)\n\`\`\`/);
@@ -410,16 +421,36 @@ export default function App() {
     }]);
   };
 
+  const parseM1QuestionsWithAI = async () => {
+    if (!m1RawText.trim()) { setError('Vui lòng nhập nội dung câu hỏi.'); return; }
+    setIsLoading(true); setError(null);
+    try {
+      const prompt = `Bạn là trợ lý giáo dục. Hãy phân tích đoạn văn bản câu hỏi sau và trả về ĐÚNG định dạng JSON.
+Dạng câu hỏi: ${m1QuestionTypes.join(', ')}.
+Văn bản:
+${m1RawText}
+
+Trả về JSON bọc trong \`\`\`json ... \`\`\`, là một mảng:
+[{"id":"q1","content":"...","options":["A","B","C","D"],"correctAnswer":"A","type":"Trắc nghiệm khách quan","level":"Nhận biết"}]
+Nếu là câu Đúng/Sai: options=["Đúng","Sai"], correctAnswer="Đúng" hoặc "Sai".
+Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là đáp án.`;
+      const text = await callGeminiWithFallback([{ text: prompt }]);
+      const jsonMatch = (text || '').match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch?.[1]) {
+        const parsed = JSON.parse(jsonMatch[1]);
+        if (Array.isArray(parsed)) { setParsedQuestions(parsed); setStage('m1_edit'); return; }
+      }
+      setError('Không thể phân tích. Hãy thử lại hoặc chỉnh sửa thủ công.');
+    } catch (e: any) { setError(e.message || 'Lỗi phân tích câu hỏi.'); }
+    finally { setIsLoading(false); }
+  };
+
   const reset = () => {
-    setStage(1);
-    setInputText('');
-    setSelectedImage(null);
-    setAnalysis(null);
-    setQuestions(null);
-    setParsedQuestions([]);
-    setActivities(null);
-    setError(null);
-    setSelectedGameId(null);
+    setStage('home');
+    setInputText(''); setSelectedImage(null); setAnalysis(null);
+    setQuestions(null); setParsedQuestions([]); setActivities(null);
+    setError(null); setSelectedGameId(null);
+    setM1QuestionTypes([]); setM1RawText('');
   };
 
   const getQuestionsPart = () => {
@@ -441,25 +472,29 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-50 glass-panel border-b border-white/20">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={reset}>
             <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-              <BookOpen size={24} />
+              <Gamepad2 size={22} />
             </div>
-            <h1 className="font-bold text-xl tracking-tight gradient-text">Trợ lý Thiết kế Bài học AI</h1>
+            <h1 className="font-bold text-lg tracking-tight gradient-text hidden sm:block">Trợ lý Tạo Trò Chơi AI</h1>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="hidden lg:flex items-center gap-4">
-              <StageIndicator currentStage={stage} error={!!error} />
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2">
+              <StageIndicator currentStage={stage} />
             </div>
-
+            {stage !== 'home' && (
+              <button onClick={reset} className="text-sm text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors">
+                <RefreshCw size={14} /> Trang chủ
+              </button>
+            )}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl transition-all"
+              className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl transition-all"
             >
-              <Settings size={18} className="text-slate-600" />
+              <Settings size={16} className="text-slate-600" />
               <div className="text-left hidden sm:block">
-                <div className="text-sm font-bold text-slate-700 leading-tight">Cài đặt API</div>
-                <div className="text-[10px] font-semibold text-red-500 leading-tight">Lấy API key để sử dụng app</div>
+                <div className="text-xs font-bold text-slate-700 leading-tight">Cài đặt API</div>
+                <div className="text-[10px] font-semibold text-red-500 leading-tight">Lấy API key để sử dụng</div>
               </div>
             </button>
           </div>
@@ -468,89 +503,188 @@ export default function App() {
 
       <main className="max-w-5xl mx-auto px-6 py-12">
         <AnimatePresence mode="wait">
-          {/* Stage 1: Analysis */}
-          {stage === 1 && (
-            <motion.div
-              key="stage1"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-8"
-            >
-              <div className="text-center max-w-2xl mx-auto space-y-4">
-                <h2 className="text-3xl font-bold text-slate-900">🚀 Bắt đầu hành trình thiết kế</h2>
-                <p className="text-slate-500">Chào bạn! Hãy gửi cho mình nội dung bài học (văn bản hoặc hình ảnh) để mình giúp bạn phân tích nhé.</p>
+          {/* HOME SCREEN */}
+          {stage === 'home' && (
+            <motion.div key="home" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-10">
+              <div className="text-center space-y-4 py-8">
+                <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-sm font-semibold border border-indigo-100">
+                  <Gamepad2 size={16} /> Trợ lý thiết kế hoạt động dạy học
+                </div>
+                <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">
+                  Tạo Trò Chơi<br />
+                  <span className="gradient-text">Học Tập Bằng AI</span>
+                </h2>
+                <p className="text-slate-500 text-lg max-w-xl mx-auto">Chọn cách bạn muốn mình giúp để bắt đầu nhé!</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Text Input */}
-                <div className="glass-card p-6 rounded-3xl">
-                  <div className="flex items-center gap-2 mb-4 text-indigo-600">
-                    <FileText size={20} />
-                    <span className="font-semibold">Nội dung bài học</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                {/* Mode 1 Card */}
+                <motion.div whileHover={{ scale: 1.02, y: -4 }} onClick={() => setStage('m1_type')}
+                  className="glass-card p-8 rounded-3xl cursor-pointer border-2 border-transparent hover:border-emerald-300 hover:shadow-xl hover:shadow-emerald-100 transition-all group"
+                >
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center text-white text-2xl mb-5 shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
+                    📄
                   </div>
-                  <textarea
-                    className="w-full h-64 p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-sm"
-                    placeholder="Dán nội dung bài học tại đây..."
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                  />
-                </div>
+                  <h3 className="text-2xl font-black text-slate-900 mb-2">Tôi đã có câu hỏi</h3>
+                  <p className="text-slate-500 text-sm mb-5">Dành cho giáo viên đã có bộ câu hỏi. Hệ thống sẽ gợi ý trò chơi phù hợp và đưa câu hỏi vào trò chơi tương tác.</p>
+                  <div className="space-y-2">
+                    {['✅ Chọn dạng câu hỏi đang có', '📋 Dán hoặc nhập câu hỏi', '🎮 Hệ thống gợi ý trò chơi phù hợp', '▶️ Chơi thử ngay!'].map(s => (
+                      <div key={s} className="text-xs text-slate-400 flex items-center gap-2">{s}</div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex items-center gap-2 text-emerald-600 font-bold text-sm">
+                    Bắt đầu <ChevronRight size={16} />
+                  </div>
+                </motion.div>
 
-                {/* Image Upload */}
-                <div
-                  className={cn(
-                    "glass-card p-6 rounded-3xl border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-4",
-                    selectedImage ? "border-indigo-500 bg-indigo-50/30" : "border-indigo-200/50 hover:border-indigo-400 hover:bg-indigo-50/20"
-                  )}
-                  onClick={() => fileInputRef.current?.click()}
+                {/* Mode 2 Card */}
+                <motion.div whileHover={{ scale: 1.02, y: -4 }} onClick={() => { if (!apiKey) { setIsSettingsOpen(true); setIsApiKeyRequired(true); } else setStage('m2_analyze'); }}
+                  className="glass-card p-8 rounded-3xl cursor-pointer border-2 border-transparent hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100 transition-all group"
                 >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                  />
-                  {selectedImage ? (
-                    <div className="relative w-full h-full flex items-center justify-center">
-                      <img src={selectedImage} alt="Preview" className="max-h-64 rounded-lg shadow-sm" />
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedImage(null); }}
-                        className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md hover:text-red-500"
-                      >
-                        <RefreshCw size={16} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                        <ImageIcon size={24} />
-                      </div>
-                      <div className="text-center">
-                        <p className="font-medium">Tải lên hình ảnh</p>
-                        <p className="text-xs text-slate-400 mt-1">Hỗ trợ JPG, PNG, WEBP</p>
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center text-white text-2xl mb-5 shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform">
+                    🤖
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 mb-2">AI tạo câu hỏi</h3>
+                  <p className="text-slate-500 text-sm mb-5">Dành cho giáo viên chưa có câu hỏi. AI sẽ phân tích bài học và tạo câu hỏi theo ý muốn của bạn.</p>
+                  <div className="space-y-2">
+                    {['📚 Nhập nội dung bài học / ảnh', '🤖 AI phân tích đầu bài', '❓ Chọn dạng, mức độ, số lượng', '🎮 AI sinh câu hỏi → chỉnh sửa → chơi!'].map(s => (
+                      <div key={s} className="text-xs text-slate-400 flex items-center gap-2">{s}</div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex items-center gap-2 text-indigo-600 font-bold text-sm">
+                    Bắt đầu <ChevronRight size={16} />
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* M1_TYPE: Select question types */}
+          {stage === 'm1_type' && (
+            <motion.div key="m1_type" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-3xl mx-auto space-y-8">
+              <div>
+                <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-4"><ChevronRight size={14} className="rotate-180" /> Quay lại</button>
+                <h2 className="text-3xl font-black">Bạn đang có dạng câu hỏi nào? 💡</h2>
+                <p className="text-slate-500 mt-2">Chọn tối đa <strong>3 dạng</strong> — hệ thống sẽ gợi ý trò chơi phù hợp.</p>
               </div>
 
-              <div className="flex justify-center pt-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {QUESTION_TYPES.map(qt => {
+                  const selected = m1QuestionTypes.includes(qt.id);
+                  const disabled = !selected && m1QuestionTypes.length >= 3;
+                  const compatibleGames = GAME_LIBRARY.filter(g => g.compatibleTypes.includes(qt.id));
+                  return (
+                    <button key={qt.id}
+                      disabled={disabled}
+                      onClick={() => setM1QuestionTypes(prev => selected ? prev.filter(t => t !== qt.id) : [...prev, qt.id])}
+                      className={cn(
+                        'p-5 rounded-2xl border-2 text-left transition-all',
+                        selected ? 'border-indigo-500 bg-indigo-50 shadow-lg shadow-indigo-100' : disabled ? 'border-slate-100 opacity-40 cursor-not-allowed' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                      )}
+                    >
+                      <div className="text-3xl mb-2">{qt.emoji}</div>
+                      <div className={cn('font-bold', selected ? 'text-indigo-700' : 'text-slate-700')}>{qt.label}</div>
+                      <div className="text-[11px] text-slate-400 mt-1">{compatibleGames.map(g => g.name).join(' · ')}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {m1QuestionTypes.length > 0 && (
+                <div className="glass-card p-5 rounded-2xl">
+                  <p className="text-sm font-semibold text-slate-600 mb-3">🎮 Trò chơi phù hợp với bộ câu hỏi của bạn:</p>
+                  <div className="flex flex-wrap gap-3">
+                    {GAME_LIBRARY.filter(g => m1QuestionTypes.some(t => g.compatibleTypes.includes(t))).map(g => (
+                      <div key={g.id} className={cn('flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold bg-gradient-to-r', g.colorFrom, g.colorTo)}>
+                        <span>{g.emoji}</span><span>{g.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
                 <button
-                  onClick={runAnalysis}
-                  disabled={isLoading || (!inputText && !selectedImage)}
-                  className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-semibold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200"
+                  onClick={() => setStage('m1_input')}
+                  disabled={m1QuestionTypes.length === 0}
+                  className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200"
                 >
-                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : <ChevronRight size={20} />}
-                  Phân tích bài học
+                  <ChevronRight size={20} /> Tiếp theo: Nhập câu hỏi
                 </button>
               </div>
             </motion.div>
           )}
 
-          {/* Stage 2: Clarification */}
-          {stage === 2 && (
+          {/* M1_INPUT: Paste questions */}
+          {stage === 'm1_input' && (
+            <motion.div key="m1_input" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-3xl mx-auto space-y-6">
+              <div>
+                <button onClick={() => setStage('m1_type')} className="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-4"><ChevronRight size={14} className="rotate-180" /> Quay lại chọn dạng</button>
+                <h2 className="text-3xl font-black">Dán hoặc nhập câu hỏi 📋</h2>
+                <p className="text-slate-500 mt-1">Dán toàn bộ câu hỏi vào ô bên dưới, AI sẽ tự phân tích cấu trúc ({m1QuestionTypes.join(', ')}).</p>
+              </div>
+              <div className="glass-card p-6 rounded-3xl">
+                <textarea
+                  className="w-full h-72 p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-sm"
+                  placeholder={`Dán câu hỏi vào đây...\nVí dụ:\nCâu 1: Nguyên tử là gì?\nA. Hạt nhân nhỏ\nB. Khối cầu rắt\nĐáp án: B\n...`}
+                  value={m1RawText}
+                  onChange={e => setM1RawText(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-between">
+                <button
+                  onClick={() => { setParsedQuestions([]); setStage('m1_edit'); }}
+                  className="px-5 py-3 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50"
+                >
+                  Nhập thủ công
+                </button>
+                <button
+                  onClick={parseM1QuestionsWithAI}
+                  disabled={isLoading || !m1RawText.trim()}
+                  className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-40 transition-all shadow-lg shadow-indigo-200"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                  Phân tích với AI
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* M2_ANALYZE: Input lesson */}
+          {stage === 'm2_analyze' && (
+            <motion.div key="m2_analyze" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
+              <div className="text-center max-w-2xl mx-auto space-y-3">
+                <button onClick={reset} className="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1 mx-auto mb-2"><ChevronRight size={14} className="rotate-180" /> Trang chủ</button>
+                <h2 className="text-3xl font-bold text-slate-900">🤖 Bước 1: Nhập nội dung bài học</h2>
+                <p className="text-slate-500">Nhập văn bản hoặc tải ảnh, AI sẽ phân tích kiến thức chính.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="glass-card p-6 rounded-3xl">
+                  <div className="flex items-center gap-2 mb-4 text-indigo-600"><FileText size={20} /><span className="font-semibold">Nội dung bài học</span></div>
+                  <textarea className="w-full h-64 p-4 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none resize-none text-sm" placeholder="Dán nội dung bài học tại đây..." value={inputText} onChange={e => setInputText(e.target.value)} />
+                </div>
+                <div className={cn('glass-card p-6 rounded-3xl border-2 border-dashed cursor-pointer flex flex-col items-center justify-center gap-4 transition-all', selectedImage ? 'border-indigo-500 bg-indigo-50/30' : 'border-indigo-200/50 hover:border-indigo-400')} onClick={() => fileInputRef.current?.click()}>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  {selectedImage ? (
+                    <div className="relative w-full flex items-center justify-center">
+                      <img src={selectedImage} alt="Preview" className="max-h-56 rounded-lg shadow-sm" />
+                      <button onClick={e => { e.stopPropagation(); setSelectedImage(null); }} className="absolute top-1 right-1 p-1 bg-white rounded-full shadow hover:text-red-500"><RefreshCw size={14} /></button>
+                    </div>
+                  ) : (
+                    <><div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400"><ImageIcon size={24} /></div><div className="text-center"><p className="font-medium">Tải lên hình ảnh</p><p className="text-xs text-slate-400 mt-1">Hỗ trợ JPG, PNG, WEBP</p></div></>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <button onClick={runAnalysis} disabled={isLoading || (!inputText && !selectedImage)} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-semibold flex items-center gap-2 hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-200">
+                  {isLoading ? <Loader2 className="animate-spin" size={20} /> : <ChevronRight size={20} />} Phân tích bài học
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* M2_NEEDS: Teacher needs form */}
+          {stage === 'm2_needs' && (
             <motion.div
               key="stage2"
               initial={{ opacity: 0, x: 20 }}
@@ -571,7 +705,7 @@ export default function App() {
                     </Markdown>
                   </div>
                   <button
-                    onClick={() => setStage(1)}
+                    onClick={() => setStage('m2_analyze')}
                     className="mt-6 text-sm text-indigo-600 hover:underline flex items-center gap-1"
                   >
                     <RefreshCw size={14} /> Làm lại bước 1
@@ -746,8 +880,8 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* Stage 3 & 4: Results */}
-          {stage === 3 && (
+          {/* M1_EDIT & M2_QUESTIONS: Question editor + activities */}
+          {(stage === 'm1_edit' || stage === 'm2_questions') && (
             <motion.div
               key="stage3"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -756,8 +890,8 @@ export default function App() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold">🤖 Kết quả đồng hành cùng bạn</h2>
-                  <p className="text-slate-500">Mọi thứ đã sẵn sàng! Bạn có thể xem và chỉnh sửa nhé.</p>
+                  <h2 className="text-2xl font-bold">{stage === 'm1_edit' ? '✏️ Chỉnh sửa câu hỏi' : '🤖 Kết quả đồng hành cùng bạn'}</h2>
+                  <p className="text-slate-500">{stage === 'm1_edit' ? 'Kiểm tra lại câu hỏi và chỉnh sửa nếu cần nhé.' : 'Mọi thứ đã sẵn sàng! Bạn có thể xem và chỉnh sửa nhé.'}</p>
                 </div>
                 <button
                   onClick={reset}
@@ -858,8 +992,8 @@ export default function App() {
                     <div className="mt-8 pt-6 border-t border-indigo-100">
                        <button
                          onClick={() => {
-                           setStage(5);
-                           setSelectedGameId(null);
+                            setStage(stage === 'm1_edit' ? 'm1_game' : 'm2_game');
+                            setSelectedGameId(null);
                          }}
                          className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-300 hover:-translate-y-1 transition-all"
                        >
@@ -895,10 +1029,10 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* Stage 5: Mini-Game */}
-          {stage === 5 && (
+          {/* GAME SELECTOR: m1_game / m2_game */}
+          {(stage === 'm1_game' || stage === 'm2_game') && (
             <motion.div
-              key="stage5"
+              key="game"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-4xl mx-auto"
@@ -907,53 +1041,37 @@ export default function App() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-8">
                     <div>
-                      <h2 className="text-3xl font-bold flex items-center gap-3">
-                        <Gamepad2 className="text-violet-600" size={32} />
-                        Chọn Trò Chơi
-                      </h2>
-                      <p className="text-slate-500 mt-2">Hãy chọn một trò chơi để tích hợp với câu hỏi bạn vừa tạo.</p>
+                      <h2 className="text-3xl font-bold flex items-center gap-3"><Gamepad2 className="text-violet-600" size={32} />Chọn Trò Chơi 🎮</h2>
+                      <p className="text-slate-500 mt-2">{stage === 'm1_game' ? 'Chỉ hiển các trò chơi phù hợp với dạng câu hỏi bạn đã chọn.' : 'Chọn một trò chơi để tích hợp với câu hỏi AI vừa tạo.'}</p>
                     </div>
                     <button
-                      onClick={() => setStage(3)}
-                      className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                      onClick={() => setStage(stage === 'm1_game' ? 'm1_edit' : 'm2_questions')}
+                      className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-xl font-medium text-slate-600 hover:bg-slate-50 flex items-center gap-2"
                     >
                       <ChevronRight size={16} className="rotate-180" /> Quay lại chỉnh sửa
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div 
-                      onClick={() => setSelectedGameId('default')}
-                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-indigo-500 hover:shadow-lg hover:shadow-indigo-100 transition-all group"
-                    >
-                      <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <Gamepad2 size={24} />
+                    {GAME_LIBRARY.filter(g =>
+                      stage === 'm2_game' ||
+                      m1QuestionTypes.some(t => g.compatibleTypes.includes(t))
+                    ).map(g => (
+                      <div
+                        key={g.id}
+                        onClick={() => setSelectedGameId(g.id)}
+                        className={cn('glass-card p-6 rounded-3xl cursor-pointer border-2 border-transparent transition-all group', g.hoverBorder, 'hover:shadow-lg')}
+                      >
+                        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center mb-4 text-2xl group-hover:scale-110 transition-transform bg-gradient-to-br text-white', g.colorFrom, g.colorTo)}>
+                          {g.emoji}
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">{g.name}</h3>
+                        <p className="text-sm text-slate-500">{g.description}</p>
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {g.compatibleTypes.map(t => <span key={t} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{t}</span>)}
+                        </div>
                       </div>
-                      <h3 className="text-xl font-bold mb-2">Quiz Mở Thẻ</h3>
-                      <p className="text-sm text-slate-500">Mặc định. Trả lời đúng để mở thẻ, phù hợp trắc nghiệm.</p>
-                    </div>
-
-                    <div 
-                      onClick={() => setSelectedGameId('vuot_ai')}
-                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-sky-500 hover:shadow-lg hover:shadow-sky-100 transition-all group"
-                    >
-                      <div className="w-12 h-12 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <CheckCircle2 size={24} />
-                      </div>
-                      <h3 className="text-xl font-bold mb-2">Vượt Ải Tri Thức</h3>
-                      <p className="text-sm text-slate-500">Giao diện bóng tối. Trả lời đúng/sai hoặc trắc nghiệm tốc độ vòng 1.</p>
-                    </div>
-
-                    <div 
-                      onClick={() => setSelectedGameId('vua_tieng_viet')}
-                      className="glass-card p-6 rounded-3xl cursor-pointer hover:border-pink-500 hover:shadow-lg hover:shadow-pink-100 transition-all group"
-                    >
-                      <div className="w-12 h-12 bg-pink-100 text-pink-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <BookOpen size={24} />
-                      </div>
-                      <h3 className="text-xl font-bold mb-2">Vua Tiếng Việt</h3>
-                      <p className="text-sm text-slate-500">Thử thách từ vựng. Trả lời ngắn, sắp xếp chữ cái trong thời gian giới hạn.</p>
-                    </div>
+                    ))}
                   </div>
                 </div>
               ) : (
@@ -1294,61 +1412,43 @@ function GameComponent({ questions }: { questions: QuestionItem[] }) {
   );
 }
 
-function StageIndicator({ currentStage, error }: { currentStage: Stage, error: boolean }) {
-  const stages = [
-    { id: 1, label: 'Bước 1: Phân tích' },
-    { id: 2, label: 'Bước 2: Nhu cầu' },
-    { id: 3, label: 'Bước 3 & 4: Kết quả' }
+function StageIndicator({ currentStage }: { currentStage: AppStage }) {
+  const m2Stages: { id: AppStage; label: string }[] = [
+    { id: 'm2_analyze', label: 'Phân tích' },
+    { id: 'm2_needs', label: 'Nhu cầu' },
+    { id: 'm2_questions', label: 'Câu hỏi' },
+    { id: 'm2_game', label: 'Chơi' },
   ];
+  const m1Stages: { id: AppStage; label: string }[] = [
+    { id: 'm1_type', label: 'Dạng' },
+    { id: 'm1_input', label: 'Nhập' },
+    { id: 'm1_edit', label: 'Kiểm tra' },
+    { id: 'm1_game', label: 'Chơi' },
+  ];
+  const isM1 = currentStage.startsWith('m1');
+  const isM2 = currentStage.startsWith('m2');
+  if (!isM1 && !isM2) return null;
+
+  const stages = isM1 ? m1Stages : m2Stages;
+  const curIdx = stages.findIndex(s => s.id === currentStage);
 
   return (
     <div className="flex items-center gap-2">
       {stages.map((s, idx) => {
-        const isCurrent = currentStage === s.id;
-        const isCompleted = currentStage > s.id;
-
-        let bgColor = "bg-slate-200 text-slate-500";
-        let labelColor = "text-slate-400";
-        let labelText = s.label;
-
-        if (isCompleted) {
-          bgColor = "bg-emerald-500 text-white";
-          labelColor = "text-emerald-600 font-bold";
-        } else if (isCurrent) {
-          if (error) {
-            bgColor = "bg-red-500 text-white";
-            labelColor = "text-red-500 font-bold";
-            labelText = "Đã dừng do lỗi";
-          } else {
-            bgColor = "bg-indigo-600 text-white ring-4 ring-indigo-100";
-            labelColor = "text-indigo-600 font-bold";
-          }
-        }
-
+        const isCompleted = idx < curIdx;
+        const isCurrent = idx === curIdx;
         return (
           <React.Fragment key={s.id}>
-            <div className="flex flex-col items-center gap-1 relative group">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 z-10",
-                  bgColor
-                )}
-              >
-                {isCompleted ? <CheckCircle2 size={16} /> : (isCurrent && error ? <AlertCircle size={16} /> : s.id)}
-              </div>
-              <span className={cn(
-                "hidden md:block absolute top-10 whitespace-nowrap text-[11px] px-2 py-1 rounded bg-white/80 backdrop-blur shadow-sm border border-slate-100",
-                labelColor
-              )}>
-                {labelText}
-              </span>
-            </div>
-            {idx < stages.length - 1 && (
+            <div className="flex flex-col items-center gap-1">
               <div className={cn(
-                "w-12 h-1 transition-all duration-300",
-                isCompleted ? "bg-emerald-500" : "bg-slate-200"
-              )} />
-            )}
+                'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all',
+                isCompleted ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' : 'bg-slate-200 text-slate-500'
+              )}>
+                {isCompleted ? <CheckCircle2 size={14} /> : idx + 1}
+              </div>
+              <span className="hidden md:block text-[10px] text-slate-400 whitespace-nowrap">{s.label}</span>
+            </div>
+            {idx < stages.length - 1 && <div className={cn('w-8 h-0.5', isCompleted ? 'bg-emerald-400' : 'bg-slate-200')} />}
           </React.Fragment>
         );
       })}
