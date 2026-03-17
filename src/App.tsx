@@ -31,6 +31,10 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import VuaTiengVietGame from './VuaTiengVietGame';
 import VuotAiTriThucGame from './VuotAiTriThucGame';
+import SanKhoBauGame from './SanKhoBauGame';
+import BucTranhBiAnGame from './BucTranhBiAnGame';
+import OngTimChuGame from './OngTimChuGame';
+import TranhTaiKeoCoGame from './TranhTaiKeoCoGame';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -72,6 +76,42 @@ const GAME_LIBRARY = [
     compatibleTypes: ['Trả lời ngắn', 'Điền khuyết'],
     colorFrom: 'from-pink-500', colorTo: 'to-rose-500',
     hoverBorder: 'hover:border-pink-400',
+  },
+  {
+    id: 'san_kho_bau',
+    name: 'Săn Kho Báu',
+    emoji: '🗃️',
+    description: 'Thu thập vàng bằng cách trả lời đúng. Hỗ trợ kéo-thả điền khuyết.',
+    compatibleTypes: ['Trắc nghiệm khách quan', 'Đúng / Sai', 'Trả lời ngắn', 'Điền khuyết'],
+    colorFrom: 'from-amber-500', colorTo: 'to-yellow-600',
+    hoverBorder: 'hover:border-amber-400',
+  },
+  {
+    id: 'buc_tranh_bi_an',
+    name: 'Bức Tranh Bí Ẩn',
+    emoji: '🖼️',
+    description: 'Trả lời đúng để lộ dần bức tranh ẩn. Hình ảnh tùy chỉnh.',
+    compatibleTypes: ['Trắc nghiệm khách quan', 'Đúng / Sai', 'Trả lời ngắn'],
+    colorFrom: 'from-slate-600', colorTo: 'to-slate-800',
+    hoverBorder: 'hover:border-yellow-400',
+  },
+  {
+    id: 'ong_tim_chu',
+    name: 'Ong Tìm Chữ',
+    emoji: '🐝',
+    description: 'Tìm đáp án ẩn trong bảng chữ cái. Kéo để chọn, ngang/dọc/chéo.',
+    compatibleTypes: ['Trả lời ngắn', 'Điền khuyết'],
+    colorFrom: 'from-yellow-400', colorTo: 'to-orange-500',
+    hoverBorder: 'hover:border-amber-400',
+  },
+  {
+    id: 'tranh_tai_keo_co',
+    name: 'Tranh Tài Kéo Co',
+    emoji: '🏆',
+    description: '2 đội đấu đả luân phiên, kéo dây về phía chiến thắng!',
+    compatibleTypes: ['Trắc nghiệm khách quan', 'Đúng / Sai'],
+    colorFrom: 'from-blue-700', colorTo: 'to-red-700',
+    hoverBorder: 'hover:border-yellow-400',
   },
 ];
 
@@ -950,7 +990,8 @@ Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là �
                             </div>
                           )}
 
-                          {q.options && (
+                          {/* Correct answer: select if has options, text input otherwise */}
+                          {q.options && q.options.length > 0 ? (
                             <div className="flex items-center gap-2 text-sm mt-3 pt-3 border-t border-slate-100">
                               <span className="font-semibold text-emerald-600">Đáp án đúng:</span>
                               <select 
@@ -960,10 +1001,21 @@ Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là �
                               >
                                 {q.options.map((opt, oIdx) => (
                                   <option key={oIdx} value={['A', 'B', 'C', 'D'][oIdx]}>
-                                    {['A', 'B', 'C', 'D'][oIdx]}
+                                    {['A', 'B', 'C', 'D'][oIdx]}: {opt}
                                   </option>
                                 ))}
                               </select>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-sm mt-3 pt-3 border-t border-slate-100">
+                              <span className="font-semibold text-emerald-600 shrink-0">Đáp án đúng:</span>
+                              <input
+                                type="text"
+                                className="flex-1 p-1.5 rounded-lg border border-slate-200 bg-emerald-50 text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-400"
+                                placeholder="Nhập đáp án..."
+                                value={q.correctAnswer || ''}
+                                onChange={(e) => handleQuestionChange(q.id, 'correctAnswer', e.target.value)}
+                              />
                             </div>
                           )}
                         </div>
@@ -1053,10 +1105,12 @@ Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là �
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {GAME_LIBRARY.filter(g =>
-                      stage === 'm2_game' ||
-                      m1QuestionTypes.some(t => g.compatibleTypes.includes(t))
-                    ).map(g => (
+                    {GAME_LIBRARY.filter(g => {
+                      const activeTypes = stage === 'm1_game'
+                        ? m1QuestionTypes
+                        : [...new Set(parsedQuestions.map(q => q.type))];
+                      return activeTypes.length === 0 || activeTypes.some(t => g.compatibleTypes.includes(t));
+                    }).map(g => (
                       <div
                         key={g.id}
                         onClick={() => setSelectedGameId(g.id)}
@@ -1107,22 +1161,42 @@ Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là �
                   {selectedGameId === 'vua_tieng_viet' && (
                     <VuaTiengVietGame 
                       initialQuestions={parsedQuestions.map(q => {
-                        // Extract correct answer logic
                         let answer = q.correctAnswer || (q.options ? q.options[0] : 'ĐÁP ÁN');
                         if (['A', 'B', 'C', 'D'].includes(answer) && q.options) {
                            const idx = ['A', 'B', 'C', 'D'].indexOf(answer);
-                           if (idx >= 0 && q.options[idx]) {
-                             answer = q.options[idx];
-                           }
+                           if (idx >= 0 && q.options[idx]) answer = q.options[idx];
                         }
                         return {
-                          text: q.content,
-                          answer: answer,
+                          text: q.content, answer,
                           scrambled: answer.split('').sort(() => Math.random() - 0.5).join('').toUpperCase(),
                           image: null
                         };
                       })} 
                       onBack={() => setSelectedGameId(null)} 
+                    />
+                  )}
+                  {selectedGameId === 'san_kho_bau' && (
+                    <SanKhoBauGame
+                      initialQuestions={parsedQuestions}
+                      onBack={() => setSelectedGameId(null)}
+                    />
+                  )}
+                  {selectedGameId === 'buc_tranh_bi_an' && (
+                    <BucTranhBiAnGame
+                      initialQuestions={parsedQuestions}
+                      onBack={() => setSelectedGameId(null)}
+                    />
+                  )}
+                  {selectedGameId === 'ong_tim_chu' && (
+                    <OngTimChuGame
+                      initialQuestions={parsedQuestions}
+                      onBack={() => setSelectedGameId(null)}
+                    />
+                  )}
+                  {selectedGameId === 'tranh_tai_keo_co' && (
+                    <TranhTaiKeoCoGame
+                      initialQuestions={parsedQuestions}
+                      onBack={() => setSelectedGameId(null)}
                     />
                   )}
                 </div>
