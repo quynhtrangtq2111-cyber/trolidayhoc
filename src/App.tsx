@@ -464,42 +464,62 @@ export default function App() {
     }]);
   };
 
-  // Extract text from DOCX or PDF using Gemini inline base64
+  // Load mammoth.js from CDN (for DOCX extraction)
+  const loadMammoth = (): Promise<any> => new Promise((resolve, reject) => {
+    const w = window as any;
+    if (w.mammoth) { resolve(w.mammoth); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+    script.onload = () => resolve(w.mammoth);
+    script.onerror = () => reject(new Error('Không tải được thư viện đọc Word.'));
+    document.head.appendChild(script);
+  });
+
+  // Extract text from DOCX (mammoth CDN) or PDF (Gemini inline base64)
   const extractTextFromFile = async (file: File) => {
-    const currentApiKey = apiKey || process.env.GEMINI_API_KEY || '';
-    if (!currentApiKey) { setError('Vui lòng thiết lập API Key trước.'); return; }
     setM1IsExtracting(true); setError(null);
     try {
-      // Read file as base64
-      const arrayBuffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-      const base64 = btoa(binary);
-      // Determine MIME type
-      const mimeType = file.name.endsWith('.pdf') ? 'application/pdf'
-        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      // Call Gemini with inline file data
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${currentApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: 'Hãy trích xuất TOÀN BỘ nội dung văn bản từ tài liệu này (bao gồm câu hỏi, đáp án, v.v.). Giữ nguyên cấu trúc câu hỏi, đánh số, và các ký tự đặc biệt. Chỉ trả về văn bản thuần túy, không giải thích thêm.' },
-                { inlineData: { mimeType, data: base64 } }
-              ]
-            }]
-          })
-        }
-      );
-      const result = await response.json();
-      const extractedText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      if (!extractedText) throw new Error('Không thể trích xuất nội dung từ tệp.');
+      let extractedText = '';
+
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        // ── DOCX: use mammoth.js from CDN ──
+        const mammoth = await loadMammoth();
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        extractedText = result.value || '';
+        if (!extractedText.trim()) throw new Error('File Word không có nội dung văn bản.');
+
+      } else {
+        // ── PDF: use Gemini inline base64 (natively supported) ──
+        const currentApiKey = apiKey || process.env.GEMINI_API_KEY || '';
+        if (!currentApiKey) { setError('Vui lòng thiết lập API Key trước.'); return; }
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${currentApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: 'Hãy trích xuất TOÀN BỘ nội dung văn bản từ tài liệu PDF này (câu hỏi, đáp án, v.v.). Giữ nguyên cấu trúc, đánh số. Chỉ trả về văn bản thuần túy.' },
+                  { inlineData: { mimeType: 'application/pdf', data: base64 } }
+                ]
+              }]
+            })
+          }
+        );
+        const result = await response.json();
+        extractedText = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!extractedText) throw new Error('Không thể trích xuất nội dung từ PDF.');
+      }
+
       setM1RawText(extractedText);
-      setM1FileInfo({ name: file.name, type: mimeType });
+      setM1FileInfo({ name: file.name, type: file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'docx' });
     } catch (e: any) {
       setError(e.message || 'Lỗi khi đọc tệp. Vui lòng thử lại.');
     } finally {
