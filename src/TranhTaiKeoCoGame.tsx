@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import MathText from './MathText';
+
 
 interface QuestionItem {
   id: string; content: string; options?: string[];
@@ -334,9 +336,7 @@ export default function TranhTaiKeoCoGame({ initialQuestions, onBack }: Props) {
           <span className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-sm flex-shrink-0 mr-4 mt-0.5 border border-slate-200 ${letterCls(ansState[i])}`}>
             {LETTERS[i]}
           </span>
-          <span className={`font-semibold text-sm leading-relaxed break-words flex-1 ${ansState[i] !== 'idle' ? 'text-white' : 'text-slate-800'}`}>
-            {opt}
-          </span>
+          <MathText inline className={`font-semibold text-sm leading-relaxed break-words flex-1 ${ansState[i] !== 'idle' ? 'text-white' : 'text-slate-800'}`}>{opt}</MathText>
         </button>
       ))}
     </div>
@@ -374,9 +374,10 @@ export default function TranhTaiKeoCoGame({ initialQuestions, onBack }: Props) {
           </div>
           <div className="flex flex-col overflow-y-auto flex-grow" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.2) transparent' }}>
             <div className="bg-black/25 p-5 rounded-2xl border border-white/10 mb-4 flex items-center justify-center flex-shrink-0" style={{ minHeight: 130 }}>
-              <p className="text-lg font-bold text-center leading-relaxed text-white w-full">
-                {isBlue ? (currentQ?.q || '...') : <span className="opacity-30 italic text-base">Đang chờ đối thủ...</span>}
-              </p>
+              {isBlue
+                ? <MathText className="text-lg font-bold text-center leading-relaxed text-white w-full">{currentQ?.q || '...'}</MathText>
+                : <span className="opacity-30 italic text-base text-white">Đang chờ đối thủ...</span>
+              }
             </div>
             {renderAnswers(isBlue)}
           </div>
@@ -407,9 +408,10 @@ export default function TranhTaiKeoCoGame({ initialQuestions, onBack }: Props) {
           </div>
           <div className="flex flex-col overflow-y-auto flex-grow" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.2) transparent' }}>
             <div className="bg-black/25 p-5 rounded-2xl border border-white/10 mb-4 flex items-center justify-center flex-shrink-0" style={{ minHeight: 130 }}>
-              <p className="text-lg font-bold text-center leading-relaxed text-white w-full">
-                {!isBlue ? (currentQ?.q || '...') : <span className="opacity-30 italic text-base">Đang chờ đối thủ...</span>}
-              </p>
+              {!isBlue
+                ? <MathText className="text-lg font-bold text-center leading-relaxed text-white w-full">{currentQ?.q || '...'}</MathText>
+                : <span className="opacity-30 italic text-base text-white">Đang chờ đối thủ...</span>
+              }
             </div>
             {renderAnswers(!isBlue)}
           </div>

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MathText from './MathText';
+
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -165,7 +167,7 @@ export default function BucTranhBiAnGame({ initialQuestions, onBack }: Props) {
           </div>
 
           <div className="bg-slate-800/60 rounded-2xl p-5 flex flex-col gap-4 flex-1">
-            <p className="text-base font-bold leading-tight text-white">{q.content}</p>
+             <MathText className="text-base font-bold leading-tight text-white">{q.content}</MathText>
 
             {hasMCQ ? (
               <div className="flex flex-col gap-2">
@@ -178,10 +180,10 @@ export default function BucTranhBiAnGame({ initialQuestions, onBack }: Props) {
                         ? 'border-yellow-500 bg-yellow-500/10 text-yellow-200'
                         : 'border-slate-700 bg-slate-800 hover:border-yellow-500/40'
                     )}>
-                    <span className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-black shrink-0 text-yellow-400">
-                      {['A', 'B', 'C', 'D'][i]}
-                    </span>
-                    {opt}
+                     <span className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-black shrink-0 text-yellow-400">
+                       {['A', 'B', 'C', 'D'][i]}
+                     </span>
+                     <MathText inline className="flex-1 text-sm">{opt}</MathText>
                   </button>
                 ))}
               </div>

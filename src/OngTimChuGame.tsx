@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import MathText from './MathText';
+
 
 interface QuestionItem {
   id: string; content: string; options?: string[];
@@ -321,7 +323,7 @@ export default function OngTimChuGame({ initialQuestions, onBack }: Props) {
               </span>
             </div>
             <div className="rounded-xl p-3 font-semibold text-base leading-relaxed" style={{ background: '#FFF4D6', color: '#5D4037' }}>
-              {currentQ?.content}
+              <MathText>{currentQ?.content || ''}</MathText>
             </div>
             <div className="mt-2 text-xs font-bold" style={{ color: '#FF8C00' }}>
               🔍 Tìm từ: {normalize(currentQ?.correctAnswer || '').split('').join(' · ')}

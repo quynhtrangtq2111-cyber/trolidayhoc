@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import MathText from './MathText';
+
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -136,7 +138,7 @@ export default function SanKhoBauGame({ initialQuestions, onBack }: Props) {
           <span className="text-xs bg-amber-500 text-slate-900 px-3 py-1 rounded-full font-bold mb-3 inline-block">
             {q.type} · {q.level}
           </span>
-          {!hasBlanks && <p className="text-xl font-bold leading-relaxed mt-2">{q.content}</p>}
+          {!hasBlanks && <MathText className="text-xl font-bold leading-relaxed mt-2 text-center">{q.content}</MathText>}
         </div>
 
         {/* Fill-blank drag-drop */}
@@ -195,7 +197,7 @@ export default function SanKhoBauGame({ initialQuestions, onBack }: Props) {
                   <span className="w-8 h-8 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center text-sm font-black shrink-0">
                     {['A', 'B', 'C', 'D'][i]}
                   </span>
-                  {opt}
+                  <MathText inline className="flex-1">{opt}</MathText>
                 </button>
               );
             })}
