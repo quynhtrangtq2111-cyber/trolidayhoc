@@ -388,12 +388,14 @@ export default function App() {
         {
           "id": "q1",
           "content": "Nội dung câu hỏi...",
-          "options": ["A", "B", "C", "D"], // (Bỏ qua nếu là tự luận/trả lời ngắn)
-          "correctAnswer": "A", 
+          "options": ["Nội dung đáp án A", "Nội dung đáp án B", "Nội dung đáp án C", "Nội dung đáp án D"],
+          "correctAnswer": "A",
           "type": "Trắc nghiệm khách quan",
           "level": "Nhận biết"
         }
       ]
+      - LUẦN TUÂN THỦ: Options KHÔNG có chữ cái đầu (A., B., C.) — chỉ ghi thuần nội dung.
+      - Công thức hóa học/toán học PHẢI dùng LaTeX bọc trong $...$. Ví dụ: $C_6H_{12}O_6$, $H_2O$.
 
       ### 🎮 BƯỚC 4: GỢI Ý HOẠT ĐỘNG HỌC TẬP
       
@@ -419,7 +421,7 @@ export default function App() {
         try {
           const parsed = JSON.parse(jsonMatch[1]);
           if (Array.isArray(parsed)) {
-            setParsedQuestions(parsed);
+            setParsedQuestions(applyLatexToQuestions(parsed));
           }
         } catch (e) {
           console.error("Lỗi parse JSON câu hỏi:", e);
@@ -463,6 +465,42 @@ export default function App() {
       correctAnswer: 'A'
     }]);
   };
+
+  /**
+   * Auto-convert plain chemical/math patterns to LaTeX if not already wrapped.
+   * e.g.  C6H12O6  →  $C_6H_{12}O_6$
+   *       (C6H10O5)n → $(C_6H_{10}O_5)_n$
+   *       10^-10   →  $10^{-10}$
+   */
+  const autoLatex = (text: string): string => {
+    if (!text) return text;
+    // Chemical formula: sequences like C6H12O6, Fe2O3, H2SO4, (C6H10O5)n etc.
+    // We match only formulas NOT already inside $...$
+    return text.replace(
+      /(?<!\$)\b([A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)+(?:\([A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*\)\d*)*)(?!\w)(?![^$]*\$)/g,
+      (match) => {
+        // Skip if match is already wrapped in $
+        if (text.includes(`$${match}$`)) return match;
+        // Convert e.g. C6H12O6 → C_6H_{12}O_6
+        const latex = match
+          .replace(/\(([^)]+)\)(\d+)/g, '($1)_{$2}') // (C6H10O5)n → (C6H10O5)_{n}
+          .replace(/([A-Za-z])([0-9]+)/g, (_, l, n) => n.length > 1 ? `${l}_{${n}}` : `${l}_${n}`);
+        return `$${latex}$`;
+      }
+    );
+  };
+
+  // Apply autoLatex to all fields in a question array
+  const applyLatexToQuestions = (qs: any[]): any[] => qs.map(q => ({
+    ...q,
+    content: autoLatex(q.content || ''),
+    options: (q.options || []).map((o: string) => {
+      // Strip leading letter prefix like "A. ", "B) ", "A - " if present
+      const stripped = o.replace(/^[A-Da-d][.)\-–]\s*/u, '').trim();
+      return autoLatex(stripped);
+    }),
+    correctAnswer: autoLatex(q.correctAnswer || ''),
+  }));
 
   // Load mammoth.js from CDN (for DOCX extraction)
   const loadMammoth = (): Promise<any> => new Promise((resolve, reject) => {
@@ -533,18 +571,26 @@ export default function App() {
     try {
       const prompt = `Bạn là trợ lý giáo dục. Hãy phân tích đoạn văn bản câu hỏi sau và trả về ĐÚNG định dạng JSON.
 Dạng câu hỏi: ${m1QuestionTypes.join(', ')}.
+
+QUAN TRỌNG VỀ ĐỊNH DẠNG CÔNG THỨC:
+- Mọi công thức hóa học (C6H12O6, H2SO4, Fe2O3...) và toán học PHẢI được bọc trong ký tự $ định dạng LaTeX.
+- Ví dụ: C6H12O6 → $C_6H_{12}O_6$  |  H2O → $H_2O$  |  10^-10 → $10^{-10}$
+- Đây là YÊU CẦU BẮT BUỘC, không bỏ qua.
+
 Văn bản:
 ${m1RawText}
 
 Trả về JSON bọc trong \`\`\`json ... \`\`\`, là một mảng:
-[{"id":"q1","content":"...","options":["A","B","C","D"],"correctAnswer":"A","type":"Trắc nghiệm khách quan","level":"Nhận biết"}]
+[{"id":"q1","content":"...","options":["$C_6H_{12}O_6$","$(C_6H_{10}O_5)_n$","$C_{12}H_{22}O_{11}$","$C_6H_{12}O_6$"],"correctAnswer":"A","type":"Trắc nghiệm khách quan","level":"Nhận biết"}]
+LƯU Ý QUAN TRỌNG: Options KHÔNG được có chữ cái đầu (A., B., C., D.) — chỉ ghi NỘI DUNG đáp án.
+correctAnswer phải là "A", "B", "C", "D" (vị trí trong mảng options).
 Nếu là câu Đúng/Sai: options=["Đúng","Sai"], correctAnswer="Đúng" hoặc "Sai".
 Nếu là Trả lời ngắn/Điền khuyết: bỏ options, correctAnswer là đáp án.`;
       const text = await callGeminiWithFallback([{ text: prompt }]);
       const jsonMatch = (text || '').match(/```json\n([\s\S]*?)\n```/);
       if (jsonMatch?.[1]) {
         const parsed = JSON.parse(jsonMatch[1]);
-        if (Array.isArray(parsed)) { setParsedQuestions(parsed); setStage('m1_edit'); return; }
+        if (Array.isArray(parsed)) { setParsedQuestions(applyLatexToQuestions(parsed)); setStage('m1_edit'); return; }
       }
       setError('Không thể phân tích. Hãy thử lại hoặc chỉnh sửa thủ công.');
     } catch (e: any) { setError(e.message || 'Lỗi phân tích câu hỏi.'); }
@@ -1595,7 +1641,9 @@ function GameComponent({ questions }: { questions: QuestionItem[] }) {
                     <span className="w-10 h-10 rounded-full bg-black/20 flex items-center justify-center font-bold text-lg shrink-0 text-white">
                       {letter}
                     </span>
-                    <span className="text-lg font-medium text-white">{opt}</span>
+                    <span className="text-lg font-medium text-white">
+                      <Markdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{opt}</Markdown>
+                    </span>
                   </div>
                 </button>
               );

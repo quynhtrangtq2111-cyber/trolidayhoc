@@ -49,10 +49,24 @@ export default function SanKhoBauGame({ initialQuestions, onBack }: Props) {
   const answer = (selected: string) => {
     if (answered) return;
     setAnswered(true);
-    const ok = selected.trim().toLowerCase() === (q.correctAnswer || '').trim().toLowerCase();
-    setFeedback(ok
-      ? { msg: '✅ Chính xác! +10 vàng', ok: true }
-      : { msg: `❌ Sai rồi! Đáp án: ${q.correctAnswer}`, ok: false });
+    // selected could be a letter (A/B/C/D) for MCQ or full text for short-answer
+    let ok: boolean;
+    const letters = ['A', 'B', 'C', 'D'];
+    const ca = (q.correctAnswer || '').trim();
+    if (q.options && q.options.length > 0 && letters.includes(ca)) {
+      // MCQ mode: selected is the letter
+      ok = selected === ca;
+      const correctText = q.options[letters.indexOf(ca)] || ca;
+      setFeedback(ok
+        ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 v\u00e0ng', ok: true }
+        : { msg: `\u274c Sai r\u1ed3i! \u0110\u00e1p \u00e1n: ${correctText}`, ok: false });
+    } else {
+      // Short-answer mode: selected is the text
+      ok = selected.trim().toLowerCase() === ca.trim().toLowerCase();
+      setFeedback(ok
+        ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 v\u00e0ng', ok: true }
+        : { msg: `\u274c Sai r\u1ed3i! \u0110\u00e1p \u00e1n: ${ca}`, ok: false });
+    }
     if (ok) setScore(s => s + 10);
   };
 
@@ -185,17 +199,18 @@ export default function SanKhoBauGame({ initialQuestions, onBack }: Props) {
         {/* MCQ */}
         {hasMCQ && (
           <div className="grid grid-cols-2 gap-4 w-full max-w-2xl">
-            {q.options!.map((opt, i) => {
-              const isCorrect = opt.trim().toLowerCase() === (q.correctAnswer || '').trim().toLowerCase();
+          {q.options!.map((opt, i) => {
+              const letter = ['A', 'B', 'C', 'D'][i];
+              const isCorrect = letter === (q.correctAnswer || '').trim().toUpperCase();
               return (
-                <button key={i} onClick={() => answer(opt)} disabled={answered}
+                <button key={i} onClick={() => answer(letter)} disabled={answered}
                   className={cn(
                     'p-4 rounded-2xl font-bold text-left flex items-center gap-3 transition-all',
                     !answered ? 'bg-white/10 hover:bg-amber-500 hover:text-slate-900 cursor-pointer' :
                     isCorrect ? 'bg-green-500 text-white' : 'bg-white/5 text-white/40'
                   )}>
                   <span className="w-8 h-8 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center text-sm font-black shrink-0">
-                    {['A', 'B', 'C', 'D'][i]}
+                    {letter}
                   </span>
                   <MathText inline className="flex-1">{opt}</MathText>
                 </button>

@@ -57,14 +57,30 @@ export default function BucTranhBiAnGame({ initialQuestions, onBack }: Props) {
   };
 
   const handleCheck = () => {
-    const val = q.options?.length ? (selectedOpt || '') : shortAns;
-    if (!val.trim()) return;
-    if (answered) return;
+    const letters = ['A', 'B', 'C', 'D'];
+    const ca = (q.correctAnswer || '').trim();
+    let isOk: boolean;
+    let correctDisplay = ca;
+
+    if (q.options && q.options.length > 0 && letters.includes(ca)) {
+      // MCQ mode: selectedOpt is the letter
+      const val = selectedOpt || '';
+      if (!val.trim()) return;
+      if (answered) return;
+      isOk = val === ca;
+      correctDisplay = q.options[letters.indexOf(ca)] || ca;
+    } else {
+      // Short-answer mode
+      const val = shortAns;
+      if (!val.trim()) return;
+      if (answered) return;
+      isOk = val.trim().toLowerCase() === ca.trim().toLowerCase();
+    }
+
     setAnswered(true);
-    const isOk = val.trim().toLowerCase() === (q.correctAnswer || '').trim().toLowerCase();
     setFeedback(isOk
-      ? { msg: '✅ Chính xác! +10 điểm', ok: true }
-      : { msg: `❌ Chưa đúng! Đáp án: ${q.correctAnswer}`, ok: false });
+      ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 \u0111i\u1ec3m', ok: true }
+      : { msg: `\u274c Ch\u01b0a \u0111\u00fang! \u0110\u00e1p \u00e1n: ${correctDisplay}`, ok: false });
     if (isOk) {
       setScore(s => s + 10);
       revealTiles(Math.ceil(TOTAL_TILES / initialQuestions.length));
@@ -171,21 +187,24 @@ export default function BucTranhBiAnGame({ initialQuestions, onBack }: Props) {
 
             {hasMCQ ? (
               <div className="flex flex-col gap-2">
-                {q.options!.map((opt, i) => (
+                {q.options!.map((opt, i) => {
+                  const letter = ['A', 'B', 'C', 'D'][i];
+                  return (
                   <button key={i} disabled={answered}
-                    onClick={() => setSelectedOpt(opt)}
+                    onClick={() => setSelectedOpt(letter)}
                     className={cn(
                       'p-3 rounded-xl border-2 text-left flex items-center gap-3 text-sm font-medium transition-all',
-                      selectedOpt === opt
+                      selectedOpt === letter
                         ? 'border-yellow-500 bg-yellow-500/10 text-yellow-200'
                         : 'border-slate-700 bg-slate-800 hover:border-yellow-500/40'
                     )}>
                      <span className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-black shrink-0 text-yellow-400">
-                       {['A', 'B', 'C', 'D'][i]}
+                       {letter}
                      </span>
                      <MathText inline className="flex-1 text-sm">{opt}</MathText>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <input type="text" value={shortAns} onChange={e => setShortAns(e.target.value)}
