@@ -57,44 +57,70 @@ export default function BucTranhBiAnGame({ initialQuestions, onBack }: Props) {
   };
 
   const handleCheck = () => {
+    if (answered) return;
     const letters = ['A', 'B', 'C', 'D'];
     const ca = (q.correctAnswer || '').trim();
-    let isOk: boolean;
-    let correctDisplay = ca;
 
-    if (q.options && q.options.length > 0 && letters.includes(ca)) {
-      // MCQ mode: selectedOpt is the letter
-      const val = selectedOpt || '';
-      if (!val.trim()) return;
-      if (answered) return;
-      isOk = val === ca;
-      correctDisplay = q.options[letters.indexOf(ca)] || ca;
+    const hasMCQ2 = q.options && q.options.length > 0;
+
+    if (hasMCQ2) {
+      // MCQ path — selectedOpt stores the letter clicked
+      const val = (selectedOpt || '').trim();
+      if (!val) return; // nothing selected yet
+
+      let isOk: boolean;
+      let correctDisplay: string;
+
+      if (letters.includes(ca)) {
+        // correctAnswer is a letter like "A"
+        isOk = val === ca;
+        correctDisplay = q.options![letters.indexOf(ca)] ?? ca;
+      } else {
+        // correctAnswer is the text content like "Đúng"/"Sai"
+        // find which letter corresponds
+        const correctIdx = q.options!.findIndex(
+          o => o.trim().toLowerCase() === ca.toLowerCase()
+        );
+        const correctLetter = correctIdx >= 0 ? letters[correctIdx] : '';
+        isOk = correctLetter ? (val === correctLetter) : (val === ca);
+        correctDisplay = q.options![correctIdx] ?? ca;
+      }
+
+      setAnswered(true);
+      setFeedback(isOk
+        ? { msg: '✅ Chính xác! +10 điểm', ok: true }
+        : { msg: `❌ Chưa đúng! Đáp án: ${correctDisplay}`, ok: false });
+      if (isOk) {
+        setScore(s => s + 10);
+        revealTiles(Math.ceil(TOTAL_TILES / initialQuestions.length));
+      }
     } else {
-      // Short-answer mode
-      const val = shortAns;
-      if (!val.trim()) return;
-      if (answered) return;
-      isOk = val.trim().toLowerCase() === ca.trim().toLowerCase();
+      // Short-answer path
+      const val = shortAns.trim();
+      if (!val) return;
+
+      const isOk = val.toLowerCase() === ca.toLowerCase();
+      setAnswered(true);
+      setFeedback(isOk
+        ? { msg: '✅ Chính xác! +10 điểm', ok: true }
+        : { msg: `❌ Chưa đúng! Đáp án: ${ca}`, ok: false });
+      if (isOk) {
+        setScore(s => s + 10);
+        revealTiles(Math.ceil(TOTAL_TILES / initialQuestions.length));
+      }
     }
 
-    setAnswered(true);
-    setFeedback(isOk
-      ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 \u0111i\u1ec3m', ok: true }
-      : { msg: `\u274c Ch\u01b0a \u0111\u00fang! \u0110\u00e1p \u00e1n: ${correctDisplay}`, ok: false });
-    if (isOk) {
-      setScore(s => s + 10);
-      revealTiles(Math.ceil(TOTAL_TILES / initialQuestions.length));
-    }
     setTimeout(() => {
       setFeedback(null); setAnswered(false); setSelectedOpt(null); setShortAns('');
       if (idx + 1 < initialQuestions.length) {
         setIdx(i => i + 1);
       } else {
-        setHiddenTiles(Array(TOTAL_TILES).fill(false)); // reveal all
+        setHiddenTiles(Array(TOTAL_TILES).fill(false));
         setScreen('end');
       }
     }, 1800);
   };
+
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

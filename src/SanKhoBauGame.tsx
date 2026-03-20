@@ -49,26 +49,45 @@ export default function SanKhoBauGame({ initialQuestions, onBack }: Props) {
   const answer = (selected: string) => {
     if (answered) return;
     setAnswered(true);
-    // selected could be a letter (A/B/C/D) for MCQ or full text for short-answer
-    let ok: boolean;
     const letters = ['A', 'B', 'C', 'D'];
     const ca = (q.correctAnswer || '').trim();
-    if (q.options && q.options.length > 0 && letters.includes(ca)) {
-      // MCQ mode: selected is the letter
-      ok = selected === ca;
-      const correctText = q.options[letters.indexOf(ca)] || ca;
-      setFeedback(ok
-        ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 v\u00e0ng', ok: true }
-        : { msg: `\u274c Sai r\u1ed3i! \u0110\u00e1p \u00e1n: ${correctText}`, ok: false });
+
+    if (q.options && q.options.length > 0) {
+      // MCQ mode: selected may be letter or text depending on how options are rendered
+      let isOk: boolean;
+      let correctDisplay: string;
+
+      if (letters.includes(ca)) {
+        // correctAnswer is a letter
+        isOk = selected === ca;
+        correctDisplay = q.options[letters.indexOf(ca)] ?? ca;
+      } else {
+        // correctAnswer is text (e.g. "Đúng"/"Sai")
+        const correctIdx = q.options.findIndex(
+          o => o.trim().toLowerCase() === ca.toLowerCase()
+        );
+        const correctLetter = correctIdx >= 0 ? letters[correctIdx] : '';
+        // selected could be letter or text
+        isOk = correctLetter
+          ? (selected === correctLetter || selected.trim().toLowerCase() === ca.toLowerCase())
+          : (selected.trim().toLowerCase() === ca.toLowerCase());
+        correctDisplay = q.options[correctIdx] ?? ca;
+      }
+
+      setFeedback(isOk
+        ? { msg: '✅ Chính xác! +10 vàng', ok: true }
+        : { msg: `❌ Sai rồi! Đáp án: ${correctDisplay}`, ok: false });
+      if (isOk) setScore(s => s + 10);
     } else {
-      // Short-answer mode: selected is the text
-      ok = selected.trim().toLowerCase() === ca.trim().toLowerCase();
-      setFeedback(ok
-        ? { msg: '\u2705 Ch\u00ednh x\u00e1c! +10 v\u00e0ng', ok: true }
-        : { msg: `\u274c Sai r\u1ed3i! \u0110\u00e1p \u00e1n: ${ca}`, ok: false });
+      // Short-answer mode
+      const isOk = selected.trim().toLowerCase() === ca.toLowerCase();
+      setFeedback(isOk
+        ? { msg: '✅ Chính xác! +10 vàng', ok: true }
+        : { msg: `❌ Sai rồi! Đáp án: ${ca}`, ok: false });
+      if (isOk) setScore(s => s + 10);
     }
-    if (ok) setScore(s => s + 10);
   };
+
 
   const next = () => {
     setFeedback(null); setAnswered(false);

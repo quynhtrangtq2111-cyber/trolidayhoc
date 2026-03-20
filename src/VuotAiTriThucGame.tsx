@@ -214,8 +214,17 @@ export default function VuotAiTriThucGame({ initialQuestions, onBack }: VuotAiTr
                 const letter = ['A', 'B', 'C', 'D'][idx];
                 let btnClass = "bg-white/5 border-white/10 hover:bg-white/10";
 
+                // Map correctAnswer text -> letter for highlighting
+                const lettersDict = ['A', 'B', 'C', 'D'];
+                let correctLts = q.correctAnswer; 
+                if (!lettersDict.includes(q.correctAnswer)) {
+                    // correctAnswer is text (e.g. "Đúng", "Sai")
+                    const correctIdx = q.options.findIndex(o => o.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase());
+                    if (correctIdx >= 0) correctLts = lettersDict[correctIdx];
+                }
+
                 if (showAnswer) {
-                  if (letter === q.correctAnswer) {
+                  if (letter === correctLts) {
                     btnClass = "bg-emerald-500 border-white shadow-[0_0_20px_rgba(16,185,129,0.5)] scale-[1.02] z-10";
                   } else if (letter === selectedOpt) {
                     btnClass = "bg-red-500 border-white opacity-90";
@@ -227,7 +236,24 @@ export default function VuotAiTriThucGame({ initialQuestions, onBack }: VuotAiTr
                 return (
                   <button
                     key={idx}
-                    onClick={() => checkAnswer(letter)}
+                    onClick={() => {
+                       // Pass logic: treat choice as correct if it matches either letter OR text corresponding to letter
+                       const choiceIsCorrect = letter === correctLts;
+                       
+                       if (showAnswer) return;
+                       if (timerRef.current) clearInterval(timerRef.current);
+                       setShowAnswer(true);
+                       setSelectedOpt(letter);
+
+                       if (choiceIsCorrect) {
+                         setScore(s => s + gameCfg.points);
+                         setCorrectCount(c => c + 1);
+                         playSound('correct');
+                       } else {
+                         playSound('error');
+                       }
+                       setTimeout(nextQuestion, 2000);
+                    }}
                     disabled={showAnswer}
                     className={cn(
                       "p-6 rounded-2xl border-2 text-left transition-all duration-300 flex items-center shadow-lg",
